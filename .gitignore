@@ -1,0 +1,31 @@
+node_modules/
+dist/
+*.log
+.env
+.DS_Store
+
+# Company-specific files (keep locally, don't commit)
+**/test-*.cjs
+**/test-*.mjs
+test-regex.js
+test-regex.ts
+get-cookies.sh
+
+# Internal documentation (keep locally)
+00-READ-ME-FIRST.md
+INDEX.md
+ARCHITECTURE.md
+CHECKLIST.md
+COMPLETION_SUMMARY.txt
+DISTRIBUTION.md
+EXTENSION_SUMMARY.md
+GET_FILE_FIX.md
+PACKAGE_SUMMARY.md
+PUSH_SUMMARY.md
+QUICK_REFERENCE.md
+START_HERE.md
+USER_GUIDE.md
+
+# Extension releases
+extension/releases/
+extension/*.vsix

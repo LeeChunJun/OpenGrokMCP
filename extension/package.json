@@ -1,0 +1,70 @@
+{
+  "name": "opengrok-mcp-extension",
+  "displayName": "OpenGrok Code Search",
+  "description": "Search and explore OpenGrok code repositories directly in VS Code",
+  "version": "1.0.4",
+  "publisher": "sumanth",
+  "author": {
+    "name": "Sumanth Reddy"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "OpenGrok MCP",
+      "properties": {
+        "opengrokMcp.url": {
+          "type": "string",
+          "default": "http://localhost:8080/source",
+          "description": "OpenGrok instance URL"
+        },
+        "opengrokMcp.cookies": {
+          "type": "string",
+          "default": "",
+          "description": "Authentication cookies (session cookies like JSESSIONID). Get from browser DevTools."
+        },
+        "opengrokMcp.autoRefreshCookies": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show notification when cookies expire"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "opengrokMcp.updateCookies",
+        "title": "OpenGrok: Update Authentication Cookies"
+      },
+      {
+        "command": "opengrokMcp.showCookieInstructions",
+        "title": "OpenGrok: Show Cookie Instructions"
+      },
+      {
+        "command": "opengrokMcp.testConnection",
+        "title": "OpenGrok: Test Connection"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "bump-version": "node bump-version.js",
+    "package": "npm run bump-version && vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^18.x",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {}
+}
