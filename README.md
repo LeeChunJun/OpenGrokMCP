@@ -15,7 +15,7 @@ OpenGrok typically requires OAuth/SSO authentication. Since MCP doesn't directly
 **Step 1: Install the Extension**
 
 Download the pre-built extension package:
-- Download: [`opengrok-mcp-extension-1.0.0.vsix`](./extension/opengrok-mcp-extension-1.0.0.vsix)
+- Download: [`opengrok-mcp-extension-1.0.5.vsix`](./extension/opengrok-mcp-extension-1.0.5.vsix)
 
 Installation:
 1. Open VS Code
@@ -103,7 +103,7 @@ npm run compile
 npm run package
 ```
 
-Result: `extension/opengrok-mcp-extension-1.0.0.vsix`
+Result: `extension/opengrok-mcp-extension-1.0.5.vsix`
 
 You can then share this `.vsix` file with others, or they can install it using Method 1 above.
 
@@ -232,7 +232,7 @@ npm run package
 
 ### Output
 
-Creates: `extension/opengrok-mcp-extension-1.0.0.vsix`
+Creates: `extension/opengrok-mcp-extension-1.0.5.vsix`
 
 Share this file with others, or they can download it from the repository.
 
@@ -380,6 +380,6 @@ MIT - See LICENSE file for details
 
 ## Version
 
-**Current:** 1.0.0  
+**Current:** 1.0.5  
 **Last Updated:** January 2026  
 **Repository:** https://github.com/sumanthreddyy/OpenGrokMCP
