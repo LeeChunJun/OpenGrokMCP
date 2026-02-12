@@ -20,21 +20,24 @@
    - 添加了新的API功能方法
 
   3. 扩展了MCP工具
-   - 在index.ts中更新了现有的工具定义
-   - 添加了14个新的API工具，包括：
-     - opengrok_get_annotation - 获取文件注解
-     - opengrok_get_directory_listing - 获取目录列表
-     - opengrok_get_history - 获取历史记录
-     - opengrok_get_file_definitions - 获取文件定义
-     - opengrok_get_file_genre - 获取文件类型
-     - opengrok_ping - 检查服务器状态
-     - opengrok_get_indexed_projects - 获取已索引项目
-     - opengrok_get_project_repositories - 获取项目仓库
-     - opengrok_get_project_repository_types - 获取仓库类型
-     - opengrok_get_project_indexed_files - 获取项目索引文件
-     - opengrok_get_last_index_time - 获取最后索引时间
-     - opengrok_get_version - 获取版本信息
-     - opengrok_get_suggestions - 获取代码建议
+     在index.ts中更新了现有的工具定义，包括：
+   - opengrok_search - 在OpenGrok中搜索代码
+   - opengrok_get_file - 获取特定文件内容
+   - opengrok_xref - 查找符号的交叉引用
+   - opengrok_list_projects - 列出所有可用项目
+   - opengrok_get_annotation - 获取文件注解信息
+   - opengrok_get_directory_listing - 获取目录列表
+   - opengrok_get_history - 获取文件或目录的历史记录
+   - opengrok_get_file_definitions - 获取文件中的定义
+   - opengrok_get_file_genre - 获取文件类型
+   - opengrok_ping - 检查OpenGrok服务器状态
+   - opengrok_get_indexed_projects - 获取已索引的项目列表
+   - opengrok_get_project_repositories - 获取项目仓库列表
+   - opengrok_get_project_repository_types - 获取项目仓库类型
+   - opengrok_get_project_indexed_files - 获取项目索引文件列表
+   - opengrok_get_last_index_time - 获取最后索引时间
+   - opengrok_get_version - 获取OpenGrok版本
+   - opengrok_get_suggestions - 获取代码建议
 
   4. 修复和优化
    - 修复了TypeScript类型错误
