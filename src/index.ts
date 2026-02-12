@@ -64,11 +64,11 @@ async function initializeClientAsync() {
   }
 }
 
-// Define MCP tools
+// Define MCP tools based on OpenGrok REST API
 const tools: Tool[] = [
   {
     name: 'opengrok_search',
-    description: 'Search for code in OpenGrok with different search modes. Returns file paths, line numbers, and code snippets.',
+    description: 'Search for code in OpenGrok with different search modes using the REST API. Returns file paths, line numbers, and code snippets.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -101,17 +101,13 @@ const tools: Tool[] = [
   },
   {
     name: 'opengrok_get_file',
-    description: 'Get the content of a specific file from OpenGrok. IMPORTANT: Use the full path from search results directly (e.g., "ProjectName/path/to/file"). Omit the project parameter - it typically causes 404 errors.',
+    description: 'Get the content of a specific file from OpenGrok using the REST API.',
     inputSchema: {
       type: 'object',
       properties: {
         path: {
           type: 'string',
-          description: 'Full file path including project name from search results (e.g., ProjectName/src/main/file.java). The path should already contain the project prefix.',
-        },
-        project: {
-          type: 'string',
-          description: 'Project name (DEPRECATED - omit this. Only use if path does not include project prefix and file still cannot be found.)',
+          description: 'File path relative to source root (e.g., path/to/file.java).',
         },
       },
       required: ['path'],
@@ -119,7 +115,7 @@ const tools: Tool[] = [
   },
   {
     name: 'opengrok_xref',
-    description: 'Find cross-references for a symbol (definitions and usages).',
+    description: 'Find cross-references for a symbol (definitions and usages) using the search API.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -137,10 +133,189 @@ const tools: Tool[] = [
   },
   {
     name: 'opengrok_list_projects',
-    description: 'List all available projects in OpenGrok.',
+    description: 'List all available projects in OpenGrok via the REST API.',
     inputSchema: {
       type: 'object',
       properties: {},
+    },
+  },
+  {
+    name: 'opengrok_get_annotation',
+    description: 'Get annotation information for a specific file including revision, author, and description.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'File path relative to source root (e.g., path/to/file.java)',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'opengrok_get_directory_listing',
+    description: 'Get directory entries including file/directory metadata.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Directory path relative to source root (e.g., path/to/dir/)',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'opengrok_get_history',
+    description: 'Get history entries for a file or directory.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'File or directory path relative to source root (e.g., path/to/file.java)',
+        },
+        withFiles: {
+          type: 'boolean',
+          description: 'Whether to include list of files in the response',
+        },
+        start: {
+          type: 'number',
+          description: 'Start index for pagination',
+        },
+        max: {
+          type: 'number',
+          description: 'Maximum number of entries to return',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'opengrok_get_file_definitions',
+    description: 'Get definitions from a specific file including types, signatures, and line information.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'File path relative to source root (e.g., path/to/file.java)',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'opengrok_get_file_genre',
+    description: 'Get the detected genre of a file (e.g., PLAIN, XREFABLE, IMAGE, DATA, HTML).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'File path relative to source root (e.g., path/to/file.java)',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'opengrok_ping',
+    description: 'Check if the OpenGrok web application is alive.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'opengrok_get_indexed_projects',
+    description: 'Get list of projects that are currently indexed.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'opengrok_get_project_repositories',
+    description: 'Get list of repositories for a specific project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description: 'Project name',
+        },
+      },
+      required: ['project'],
+    },
+  },
+  {
+    name: 'opengrok_get_project_repository_types',
+    description: 'Get types of repositories for a specific project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description: 'Project name',
+        },
+      },
+      required: ['project'],
+    },
+  },
+  {
+    name: 'opengrok_get_project_indexed_files',
+    description: 'Get list of files tracked by the index database for a specific project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: {
+          type: 'string',
+          description: 'Project name',
+        },
+      },
+      required: ['project'],
+    },
+  },
+  {
+    name: 'opengrok_get_last_index_time',
+    description: 'Get the last time the index was updated (in ISO 8601 format).',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'opengrok_get_version',
+    description: 'Get the version of the OpenGrok web application.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'opengrok_get_suggestions',
+    description: 'Get code completion suggestions based on the query.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query for suggestions',
+        },
+        project: {
+          type: 'string',
+          description: 'Project name (optional)',
+        },
+        field: {
+          type: 'string',
+          description: 'Field to search in (defs, path, hist, refs, type, full). Default is "full".',
+          enum: ['defs', 'path', 'hist', 'refs', 'type', 'full'],
+        },
+      },
+      required: ['query'],
     },
   },
 ];
@@ -201,15 +376,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'opengrok_get_file': {
-        const { path, project } = args as {
+        const { path } = args as {
           path: string;
-          project?: string;
         };
 
-        const fileContent = await openGrokClient.getFileContent(
-          path,
-          project || config.defaultProject
-        );
+        const fileContent = await openGrokClient.getFileContent(path);
 
         return {
           content: [
@@ -250,6 +421,216 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: JSON.stringify(projects, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_annotation': {
+        const { path } = args as {
+          path: string;
+        };
+
+        const annotation = await openGrokClient.getAnnotation(path);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(annotation, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_directory_listing': {
+        const { path } = args as {
+          path: string;
+        };
+
+        const directoryListing = await openGrokClient.getDirectoryListing(path);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(directoryListing, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_history': {
+        const { path, withFiles, start, max } = args as {
+          path: string;
+          withFiles?: boolean;
+          start?: number;
+          max?: number;
+        };
+
+        const history = await openGrokClient.getHistory(path, withFiles, start, max);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(history, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_file_definitions': {
+        const { path } = args as {
+          path: string;
+        };
+
+        const definitions = await openGrokClient.getFileDefinitions(path);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(definitions, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_file_genre': {
+        const { path } = args as {
+          path: string;
+        };
+
+        const genre = await openGrokClient.getFileGenre(path);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: genre,
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_ping': {
+        const isAlive = await openGrokClient.ping();
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `OpenGrok server is ${isAlive ? 'alive' : 'not responding'}`,
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_indexed_projects': {
+        const projects = await openGrokClient.getIndexedProjects();
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(projects, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_project_repositories': {
+        const { project } = args as {
+          project: string;
+        };
+
+        const repositories = await openGrokClient.getProjectRepositories(project);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(repositories, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_project_repository_types': {
+        const { project } = args as {
+          project: string;
+        };
+
+        const repositoryTypes = await openGrokClient.getProjectRepositoryTypes(project);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(repositoryTypes, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_project_indexed_files': {
+        const { project } = args as {
+          project: string;
+        };
+
+        const indexedFiles = await openGrokClient.getProjectIndexedFiles(project);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(indexedFiles, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_last_index_time': {
+        const lastTime = await openGrokClient.getLastIndexTime();
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: lastTime,
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_version': {
+        const version = await openGrokClient.getVersion();
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: version,
+            },
+          ],
+        };
+      }
+
+      case 'opengrok_get_suggestions': {
+        const { query, project, field = 'full' } = args as {
+          query: string;
+          project?: string;
+          field?: string;
+        };
+
+        const suggestions = await openGrokClient.getSuggestions(query, project, field);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(suggestions, null, 2),
             },
           ],
         };

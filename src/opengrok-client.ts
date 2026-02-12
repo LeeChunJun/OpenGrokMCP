@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
+import { OpenGrokApiClient, SearchResponse, SearchResult as ApiSearchResult } from './opengrok-api-client.js';
 
 export interface SearchResult {
   path: string;
@@ -23,44 +24,21 @@ export interface CrossReference {
 }
 
 /**
- * Client for interacting with OpenGrok via web interface
+ * Client for interacting with OpenGrok via REST API
  */
 export class OpenGrokClient {
-  private client: AxiosInstance;
+  private apiClient: OpenGrokApiClient;
   private baseUrl: string;
 
   constructor(baseUrl: string, cookieJar?: CookieJar, username?: string, password?: string) {
     this.baseUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
     
-    const config: any = {
-      baseURL: this.baseUrl,
-      timeout: 30000,
-      headers: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-      validateStatus: () => true, // Don't throw on any status code
-      withCredentials: true,
-    };
-
-    // Use cookie jar if provided (for SSO/OAuth)
-    if (cookieJar) {
-      this.client = wrapper(axios.create(config)) as any;
-      (this.client.defaults as any).jar = cookieJar;
-    } else {
-      // Fall back to basic auth if credentials provided
-      if (username && password) {
-        config.auth = {
-          username,
-          password,
-        };
-      }
-      this.client = axios.create(config);
-    }
+    // 创建API客户端实例
+    this.apiClient = new OpenGrokApiClient(this.baseUrl, cookieJar, username, password);
   }
 
   /**
-   * Search for code across projects (using web interface)
+   * Search for code across projects (using REST API)
    * @param query - The search query string
    * @param project - Project to search in (required)
    * @param searchType - Type of search: 'full' (text), 'defs' (definitions), 'refs' (symbol references), 'path' (file path), 'hist' (history)
@@ -80,144 +58,92 @@ export class OpenGrokClient {
 
     try {
       // Build search parameters based on searchType
-      const params: any = {
-        project,
-        xrd: '',
-        nn: '1',  // New results flag
-      };
+      let full: string | undefined;
+      let def: string | undefined;
+      let symbol: string | undefined;
+      let path: string | undefined;
+      let hist: string | undefined;
+      let type: string | undefined;
 
       // Set only the active search parameter
       switch (searchType) {
         case 'defs':
-          params.defs = query;
+          def = query;
           break;
         case 'refs':
-          params.refs = query;
+          symbol = query;
           break;
         case 'path':
-          params.path = query;
+          path = query;
           break;
         case 'hist':
-          params.hist = query;
+          hist = query;
           break;
         case 'full':
         default:
-          params.full = query;
+          full = query;
           break;
       }
 
       // Add language filter if specified
       if (language) {
-        params.type = language;
-      } else {
-        params.type = ''; // Empty means all languages
+        type = language;
       }
 
-      const response = await this.client.get('/search', { params, maxRedirects: 10 });
-      
-      // Check for authentication errors
-      if (response.status === 401 || response.status === 403) {
-        console.error(`[OpenGrok] Authentication failed (${response.status}). Cookies may have expired.`);
-        console.error(`[OpenGrok] Please update OPENGROK_COOKIES in mcp.json with fresh session cookies.`);
-        console.error(`[OpenGrok] Steps:`);
-        console.error(`[OpenGrok]   1. Visit: ${this.baseUrl}`);
-        console.error(`[OpenGrok]   2. Open DevTools (F12) → Application → Cookies`);
-        console.error(`[OpenGrok]   3. Copy the whole Cookie string from the Request Headers`);
-        console.error(`[OpenGrok]   4. Update OPENGROK_COOKIES in ~/.config/Code/User/mcp.json`);
-        console.error(`[OpenGrok]   5. Reload VS Code`);
-        throw new Error(`Authentication failed (${response.status}). Your session cookies have expired. See console for instructions.`);
-      }
+      // Use projects parameter for project filtering
+      const projects = project;
 
-      if (response.status !== 200) {
-        throw new Error(`OpenGrok search failed with status ${response.status}`);
-      }
+      const response = await this.apiClient.search(
+        full, def, symbol, path, hist, type, projects, maxResults.toString()
+      );
 
-      // Parse HTML response to extract results
-      const results = this.parseSearchResults(response.data, project);
-      return results.slice(0, maxResults);
+      // Transform API response to our expected format
+      return this.transformSearchResults(response, project).slice(0, maxResults);
     } catch (error: any) {
       throw new Error(`OpenGrok search failed: ${error.message}`);
     }
   }
 
   /**
-   * Parse search results from HTML response
+   * Transform API search results to our expected format
    */
-  private parseSearchResults(html: string, project?: string): SearchResult[] {
+  private transformSearchResults(apiResponse: SearchResponse, project: string): SearchResult[] {
     const results: SearchResult[] = [];
     
-    // OpenGrok search result format:
-    // <a class="s" href="/xref/PROJECT/path/to/file#LINE"><span class="l">LINE</span>CODE_SNIPPET</a>
-    // Extract the full link element including the code snippet
-    const resultPattern = /<a\s+class="s"\s+href="\/xref\/([^"]+?)#(\d+)"[^>]*>(.*?)<\/a>/g;
-    
-    const seen = new Set<string>();
-    let match;
-    let matchCount = 0;
-
-    while ((match = resultPattern.exec(html)) !== null) {
-      matchCount++;
-      const filePath = match[1];
-      const line = parseInt(match[2], 10) || 0;
-      const fullSnippet = match[3]; // Raw HTML snippet from OpenGrok
-      
-      const key = `${filePath}:${line}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        results.push({
-          path: filePath,
-          line: line,
-          snippet: fullSnippet, // Return the raw snippet so chatbot can see context
-          project: project || 'unknown',
-        });
+    // apiResponse.results is a map where keys are file paths and values are arrays of hits in those files
+    for (const [filePath, hits] of Object.entries(apiResponse.results)) {
+      // Type guard for hits array
+      if (Array.isArray(hits)) {
+        for (const hit of hits) {
+          // Ensure hit has the expected structure
+          if (typeof hit === 'object' && hit.lineNumber && hit.line) {
+            // Extract line number from the hit
+            const lineNumber = hit.lineNumber ? parseInt(hit.lineNumber, 10) : 0;
+            const key = `${filePath}:${lineNumber}`;
+            
+            results.push({
+              path: filePath,
+              line: lineNumber,
+              snippet: hit.line, // The actual code snippet with highlighting
+              project: project || 'unknown',
+            });
+          }
+        }
       }
-    }
-
-    // Log debug info
-    if (matchCount > 0) {
-      console.error(`[OpenGrok] parseSearchResults: Found ${matchCount} matches, returning ${results.length} unique results`);
-    } else {
-      console.error(`[OpenGrok] parseSearchResults: No matches found with pattern`);
-      // Try simpler pattern for debugging
-      const simplePattern = /<a class="s"/g;
-      const simpleMatches = html.match(simplePattern);
-      console.error(`[OpenGrok] Found ${simpleMatches ? simpleMatches.length : 0} <a class="s" elements`);
     }
 
     return results;
   }
 
   /**
-   * Get file content
-   * 
-   * NOTE: OpenGrok's file retrieval works best without the project prefix.
-   * The project parameter is kept for compatibility but should typically be omitted.
-   * If the file path from search results includes the project name, use that directly.
+   * Get file content using the REST API
+   * @param path File path relative to source root
+   * @param project Project name (optional for API but kept for compatibility)
    */
   async getFileContent(path: string, project?: string): Promise<FileContent> {
     try {
-      // OpenGrok API works best with just /xref/path without project prefix
-      // Try without project first, then fall back to with project if needed
-      let url = `/xref/${path}`;
-      let response = await this.client.get(url);
+      const content = await this.apiClient.getFileContent(path);
       
-      // If 404 and project was provided, try with project prefix as fallback
-      if (response.status === 404 && project) {
-        url = `/xref/${project}/${path}`;
-        response = await this.client.get(url);
-      }
-      
-      if (response.status === 401 || response.status === 403) {
-        throw new Error(`Authentication failed (${response.status}). Update OPENGROK_COOKIES.`);
-      }
-
-      if (response.status !== 200) {
-        throw new Error(`Failed to get file: ${response.status}. Tip: Omit the 'project' parameter and use the full path from search results (e.g., 'ProjectName/path/to/file').`);
-      }
-
-      // Extract code content from HTML
-      const content = this.extractFileContent(response.data);
-
       return {
         path,
         content: content,
@@ -229,50 +155,31 @@ export class OpenGrokClient {
   }
 
   /**
-   * Extract file content from OpenGrok HTML
-   */
-  private extractFileContent(html: string): string {
-    // Look for code in <pre> tags or similar
-    const preMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
-    if (preMatch) {
-      return preMatch[1]
-        .replace(/<[^>]+>/g, '') // Remove HTML tags
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-        .trim();
-    }
-    return 'File content could not be extracted';
-  }
-
-  /**
-   * Get cross-references for a symbol
+   * Get cross-references for a symbol using the search API
    */
   async getCrossReferences(symbol: string, project?: string): Promise<CrossReference[]> {
     try {
-      const params: any = {
-        q: `definitions:${symbol}`,
-      };
-
-      if (project) {
-        params.project = project;
-      }
-
-      const response = await this.client.get('/search', { params });
+      // Use search API to find symbol references
+      const response: SearchResponse = await this.apiClient.search(undefined, undefined, symbol, undefined, undefined, undefined, project);
       
-      if (response.status === 401 || response.status === 403) {
-        throw new Error(`Authentication failed (${response.status}). Update OPENGROK_COOKIES.`);
+      // Transform results to cross-reference format
+      const refs: CrossReference[] = [];
+      for (const [filePath, hits] of Object.entries(response.results)) {
+        // Type guard for hits array
+        if (Array.isArray(hits)) {
+          for (const hit of hits) {
+            if (typeof hit === 'object' && hit.lineNumber) {
+              const line = hit.lineNumber ? parseInt(hit.lineNumber, 10) : 0;
+              refs.push({
+                symbol: symbol,
+                file: filePath,
+                line: line,
+                type: 'reference' as const, // For API-based implementation, we'll consider all as references
+              });
+            }
+          }
+        }
       }
-
-      // Parse results as cross-references
-      const searchResults = this.parseSearchResults(response.data, project);
-      
-      const refs = searchResults.map(r => ({
-        symbol: symbol,
-        file: r.path,
-        line: r.line,
-        type: 'definition' as const,
-      }));
 
       return refs;
     } catch (error: any) {
@@ -281,45 +188,175 @@ export class OpenGrokClient {
   }
 
   /**
-   * List available projects by scraping the main page
+   * List available projects using the REST API
    */
   async listProjects(): Promise<string[]> {
     try {
-      const response = await this.client.get('/');
-      
-      if (response.status === 401 || response.status === 403) {
-        throw new Error(`Authentication failed (${response.status}). Update OPENGROK_COOKIES.`);
-      }
-
-      if (response.status !== 200) {
-        throw new Error(`OpenGrok API error: ${response.status}`);
-      }
-
-      // Extract project names from the HTML select dropdown
-      const projects = this.parseProjects(response.data);
-      return projects;
+      return await this.apiClient.getProjects();
     } catch (error: any) {
       throw new Error(`Failed to list projects: ${error.message}`);
     }
   }
 
+  // 以下是基于OpenGrok REST API的额外功能方法
+
   /**
-   * Parse project list from HTML
+   * Get annotation for a file
+   * @param path File path relative to source root
    */
-  private parseProjects(html: string): string[] {
-    const projects: string[] = [];
-    
-    // Look for <option value="projectname">projectname</option>
-    const optionPattern = /<option[^>]*value="([^"]*)"[^>]*>([^<]*)<\/option>/g;
-    let match;
-
-    while ((match = optionPattern.exec(html)) !== null) {
-      const projectName = match[1] || match[2];
-      if (projectName && projectName.trim() !== '') {
-        projects.push(projectName.trim());
-      }
+  async getAnnotation(path: string): Promise<any[]> {
+    try {
+      return await this.apiClient.getAnnotation(path);
+    } catch (error: any) {
+      throw new Error(`Failed to get annotation: ${error.message}`);
     }
+  }
 
-    return projects;
+  /**
+   * Get directory listing
+   * @param path Path to directory relative to source root
+   */
+  async getDirectoryListing(path: string): Promise<any[]> {
+    try {
+      return await this.apiClient.getDirectoryListing(path);
+    } catch (error: any) {
+      throw new Error(`Failed to get directory listing: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get history for a file/directory
+   * @param path Path to file/directory relative to source root
+   * @param withFiles Whether to include list of files
+   * @param start Start index
+   * @param max Number of entries to get
+   */
+  async getHistory(path: string, withFiles?: boolean, start?: number, max?: number): Promise<any> {
+    try {
+      return await this.apiClient.getHistory(path, withFiles, start, max);
+    } catch (error: any) {
+      throw new Error(`Failed to get history: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get file definitions
+   * @param path File path relative to source root
+   */
+  async getFileDefinitions(path: string): Promise<any[]> {
+    try {
+      return await this.apiClient.getFileDefinitions(path);
+    } catch (error: any) {
+      throw new Error(`Failed to get file definitions: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get file genre
+   * @param path File path relative to source root
+   */
+  async getFileGenre(path: string): Promise<string> {
+    try {
+      return await this.apiClient.getFileGenre(path);
+    } catch (error: any) {
+      throw new Error(`Failed to get file genre: ${error.message}`);
+    }
+  }
+
+  /**
+   * Ping the OpenGrok server to check if it's alive
+   */
+  async ping(): Promise<boolean> {
+    try {
+      return await this.apiClient.ping();
+    } catch (error: any) {
+      console.error(`Ping failed: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Get indexed projects
+   */
+  async getIndexedProjects(): Promise<string[]> {
+    try {
+      return await this.apiClient.getIndexedProjects();
+    } catch (error: any) {
+      throw new Error(`Failed to get indexed projects: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get project repositories
+   * @param project Project name
+   */
+  async getProjectRepositories(project: string): Promise<string[]> {
+    try {
+      return await this.apiClient.getProjectRepositories(project);
+    } catch (error: any) {
+      throw new Error(`Failed to get project repositories: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get project repository types
+   * @param project Project name
+   */
+  async getProjectRepositoryTypes(project: string): Promise<string[]> {
+    try {
+      return await this.apiClient.getProjectRepositoryTypes(project);
+    } catch (error: any) {
+      throw new Error(`Failed to get project repository types: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get project indexed files
+   * @param project Project name
+   */
+  async getProjectIndexedFiles(project: string): Promise<string[]> {
+    try {
+      return await this.apiClient.getProjectIndexedFiles(project);
+    } catch (error: any) {
+      throw new Error(`Failed to get project indexed files: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get suggestions for code completion
+   * @param query Search query
+   * @param project Project to search in
+   * @param field Field to search in (defs, path, hist, refs, type, full)
+   */
+  async getSuggestions(query: string, project?: string, field: string = 'full'): Promise<any[]> {
+    try {
+      const projects = project ? project : undefined;
+      const response = await this.apiClient.getSuggestions(projects, field, undefined, query, query, query, query, query, undefined);
+      return response.suggestions;
+    } catch (error: any) {
+      throw new Error(`Failed to get suggestions: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get the last index time
+   */
+  async getLastIndexTime(): Promise<string> {
+    try {
+      return await this.apiClient.getLastIndexTime();
+    } catch (error: any) {
+      throw new Error(`Failed to get last index time: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get web application version
+   */
+  async getVersion(): Promise<string> {
+    try {
+      return await this.apiClient.getVersion();
+    } catch (error: any) {
+      throw new Error(`Failed to get version: ${error.message}`);
+    }
   }
 }
